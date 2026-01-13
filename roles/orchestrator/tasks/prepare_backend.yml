@@ -1,0 +1,24 @@
+---
+- name: 初始化后端元数据库
+  shell: |
+    mysql -h {{ backend_mysql_host }} -P {{ backend_mysql_port }} -u root -p'{{ backend_mysql_root_pass }}' -e "
+    CREATE DATABASE IF NOT EXISTS orchestrator CHARACTER SET utf8mb4;
+    CREATE USER IF NOT EXISTS '{{ backend_mysql_user }}'@'%' IDENTIFIED BY '{{ backend_mysql_pass }}';
+    GRANT ALL PRIVILEGES ON orchestrator.* TO '{{ backend_mysql_user }}'@'%';
+    FLUSH PRIVILEGES;"
+  ignore_errors: yes
+
+# --- 2. 清洗旧数据 ---
+- name: 停止 Orchestrator 以进行清洗
+  systemd: { name: orchestrator, state: stopped }
+  ignore_errors: yes
+
+- name: 清洗 Orchestrator 脏拓扑数据
+  shell: |
+    mysql -h {{ backend_mysql_host }} -P {{ backend_mysql_port }} -u root -p'{{ backend_mysql_root_pass }}' -e "
+    USE orchestrator;
+    TRUNCATE TABLE database_instance;
+    TRUNCATE TABLE database_instance_maintenance;
+    TRUNCATE TABLE hostname_resolve;
+    "
+  ignore_errors: yes

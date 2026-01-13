@@ -1,0 +1,34 @@
+{
+    "Debug": true,
+    "EnableSyslog": true,
+    "ListenAddress": ":3000",
+
+    "MySQLTopologyUser": "{{ orc_topology_user }}",
+    "MySQLTopologyPassword": "{{ orc_topology_pass }}",
+
+    "BackendDB": "mysql",
+    "MySQLOrchestratorHost": "{{ backend_mysql_host }}",
+    "MySQLOrchestratorPort": {{ backend_mysql_port }},
+    "MySQLOrchestratorDatabase": "orchestrator",
+    "MySQLOrchestratorUser": "{{ backend_mysql_user }}",
+    "MySQLOrchestratorPassword": "{{ backend_mysql_pass }}",
+
+    "RecoveryPeriodBlockSeconds": 5,
+    "RecoveryIgnoreHostnameFilters": [],
+    "RecoverMasterClusterFilters": ["*"],
+
+    "ApplyMySQLPromotionAfterMasterFailover": true,
+    "MasterFailoverLostInstancesDowntimeMinutes": 0,
+    "DetachLostSlavesAfterMasterFailover": true,
+
+    "HostnameResolveMethod": "none",
+    "MySQLHostnameResolveMethod": "SELECT @@report_host",
+    "MySQLTopologyUseIP": false,
+
+    "ProcessesShellCommand": "bash",
+    "PostMasterFailoverProcesses": [
+        "/usr/local/bin/orc_vip_hook.sh MasterFailover {failedHost} {successorHost}"
+    ],
+
+    "DetectClusterAliasQuery": "SELECT 'prod_cluster'"
+}

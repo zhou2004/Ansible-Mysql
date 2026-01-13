@@ -1,0 +1,16 @@
+[Unit]
+Description=Orchestrator MySQL Topology Manager
+After=network.target
+
+[Service]
+User=root
+Group=root
+Type=simple
+WorkingDirectory={{ orc_install_dir }}
+ExecStart={{ orc_install_dir }}/orchestrator --config=/etc/orchestrator.conf.json http
+Restart=always
+RestartSec=5
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target

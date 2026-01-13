@@ -1,0 +1,192 @@
+---
+# =======================================================
+# 阶段一：在中控机准备安装包
+# =======================================================
+- name: 确定安装包路径 (Control Node)
+  set_fact:
+    final_src_path: "{{ local_package_path if local_package_path | length > 0 else '/tmp/' + mysql_tarball }}"
+  delegate_to: localhost
+  run_once: true
+  become: false
+
+- name: 检查/下载安装包 (Control Node)
+  block:
+    - name: 检查文件状态
+      stat:
+        path: "{{ final_src_path }}"
+      register: local_file_stat
+    
+    - name: 下载 MySQL (如果不存在)
+      get_url:
+        url: "{{ mysql_download_url }}"
+        dest: "{{ final_src_path }}"
+        mode: '0644'
+        timeout: 600 # 800M 文件建议给更长超时
+      when: not local_file_stat.stat.exists
+  delegate_to: localhost
+  run_once: true
+  become: false
+
+# =======================================================
+# 阶段二：环境检查
+# =======================================================
+- name: 检查端口占用
+  shell: "ss -tunlp | grep ':{{ mysql_port }} '"
+  register: port_check
+  ignore_errors: yes
+  failed_when: false
+  changed_when: false
+  when: ansible_os_family != "Windows"
+
+- name: 端口占用警告
+  debug:
+    msg: "警告: 端口 {{ mysql_port }} 已被占用！跳过安装。"
+  when: port_check.rc == 0
+
+- name: 安装基础依赖 (包含 rsync)
+  block:
+    - name: 安装依赖 (Debian/Ubuntu)
+      apt:
+        name: ['libnuma1', 'libncurses5', 'libaio1', 'tar', 'xz-utils'] # 确保安装 rsync
+        state: present
+        update_cache: yes
+      when: ansible_os_family == "Debian"
+
+    - name: 安装依赖 (CentOS/RedHat)
+      yum:
+        name: ['numactl-libs', 'ncurses-compat-libs', 'libaio', 'tar', 'xz'] # 确保安装 rsync
+        state: present
+      when: ansible_os_family == "RedHat"
+  when: port_check.rc != 0
+
+
+# =======================================================
+# 阶段三：【核心优化】极速分发与解压
+# =======================================================
+- name: 用户与目录准备
+  block:
+    - group: { name: "{{ mysql_group }}", state: present }
+    - user: { name: "{{ mysql_user }}", group: "{{ mysql_group }}", shell: /bin/false, create_home: no }
+  when: port_check.rc != 0
+
+# --- 优化点 1: 使用 synchronize (rsync) 替代 copy/unarchive 推送 ---
+# 速度提升关键：rsync 算法 + 避免 Python IO 开销
+- name: 极速分发安装包到目标主机 /tmp
+  synchronize:
+    src: "{{ final_src_path }}"
+    dest: "/tmp/{{ mysql_tarball }}"
+    mode: push
+    compress: no # 已经是压缩包了，rsync 再压缩反而慢
+  when: port_check.rc != 0
+
+# --- 优化点 2: 目标机本地解压 ---
+# remote_src: yes 让目标机直接读取本地文件解压，不走网络
+- name: 目标机本地解压
+  unarchive:
+    src: "/tmp/{{ mysql_tarball }}"
+    dest: "/tmp"
+    remote_src: yes
+    creates: "/tmp/{{ mysql_package_folder }}/bin/mysqld"
+  when: port_check.rc != 0
+
+# =======================================================
+# 阶段四：移动与配置
+# =======================================================
+- name: 安装逻辑块
+  block:
+    - name: 检查正式目录是否存在
+      stat:
+        path: "{{ mysql_install_dir }}"
+      register: install_dir_stat
+
+    - name: 移动 MySQL 到正式目录
+      shell: "mv /tmp/{{ mysql_package_folder }} {{ install_base_dir }}/"
+      args:
+        creates: "{{ mysql_install_dir }}/bin/mysqld"
+      when: not install_dir_stat.stat.exists
+
+    - name: 修正权限
+      file:
+        path: "{{ mysql_install_dir }}"
+        state: directory
+        owner: "{{ mysql_user }}"
+        group: "{{ mysql_group }}"
+        mode: '0755'
+        recurse: yes
+
+    - name: 创建数据目录
+      file:
+        path: "{{ mysql_data_dir }}"
+        state: directory
+        owner: "{{ mysql_user }}"
+        group: "{{ mysql_group }}"
+        mode: '0777'
+
+    - name: 分发 my.cnf
+      template:
+        src: my.cnf.j2
+        dest: "{{ mysql_config_path }}"
+        mode: '0644'
+
+    - name: 检查初始化状态
+      stat:
+        path: "{{ mysql_data_dir }}/mysql"
+      register: mysql_data_check
+
+    - name: 初始化 MySQL
+      command: >
+        {{ mysql_install_dir }}/bin/mysqld 
+        --defaults-file={{ mysql_config_path }}
+        --initialize-insecure 
+        --user={{ mysql_user }}
+        --basedir={{ mysql_install_dir }} 
+        --datadir={{ mysql_data_dir }}
+      when: not mysql_data_check.stat.exists
+
+    - name: 配置 Systemd
+      template:
+        src: mysqld.service.j2
+        dest: /etc/systemd/system/mysqld.service
+        mode: '0644'
+      notify: Restart MySQL
+
+    - name: 启动服务
+      systemd: { name: mysql, state: started, enabled: yes, daemon_reload: yes }
+
+    - name: 环境变量软链
+      file: { src: "{{ mysql_install_dir }}/bin/mysql", dest: /usr/bin/mysql, state: link }
+
+    - name: 等待启动
+      wait_for: { port: "{{ mysql_port }}", delay: 5 }
+
+    - name: 设置密码
+      shell: |
+        {{ mysql_install_dir }}/bin/mysql -u root --skip-password -e "
+        ALTER USER 'root'@'localhost' IDENTIFIED WITH {{ mysql_auth_plugin }} BY '{{ mysql_root_password }}';
+        UPDATE mysql.user SET Host='%' WHERE User='root';
+        FLUSH PRIVILEGES;"
+      ignore_errors: true 
+      no_log: true 
+      when: not mysql_data_check.stat.exists
+
+    # 清理目标机上的大文件
+    - name: 清理目标机临时压缩包
+      file:
+        path: "/tmp/{{ mysql_tarball }}"
+        state: absent
+
+  when: port_check.rc != 0
+
+# =======================================================
+# 阶段五：清理中控机
+# =======================================================
+- name: 清理中控机安装包
+  file:
+    path: "{{ final_src_path }}"
+    state: absent
+  delegate_to: localhost
+  run_once: true
+  become: false
+  when: 
+    - cleanup_local_strategy | bool
+    - local_package_path | length == 0

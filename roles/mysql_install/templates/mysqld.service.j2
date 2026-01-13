@@ -1,0 +1,21 @@
+# templates/mysqld.service.j2
+[Unit]
+Description=MySQL Server
+Documentation=man:mysqld(8)
+Documentation=http://dev.mysql.com/doc/refman/en/using-systemd.html
+After=network.target
+After=syslog.target
+
+[Service]
+User={{ mysql_user }}
+Group={{ mysql_group }}
+Type=forking
+PIDFile={{ mysql_data_dir }}/mysqld.pid
+# 使用旧版兼容脚本启动或直接指向 mysqld
+ExecStart={{ mysql_install_dir }}/support-files/mysql.server start
+ExecReload={{ mysql_install_dir }}/support-files/mysql.server reload
+ExecStop={{ mysql_install_dir }}/support-files/mysql.server stop
+PrivateTmp=false
+
+[Install]
+WantedBy=multi-user.target

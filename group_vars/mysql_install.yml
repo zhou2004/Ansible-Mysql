@@ -1,0 +1,47 @@
+---
+# ================= MySQL 版本控制 =================
+# 主版本号
+mysql_major_version: "8.0"
+# 具体版本号
+mysql_version: "8.0.24"
+# 系统架构
+mysql_arch: "x86_64"
+# 源码卸载策略 (true: 删除控制节点源码, false: 保留)
+cleanup_local_strategy: false
+
+
+# ================= 安装源设置 =================
+mysql_package_folder: "mysql-{{ mysql_version }}-linux-glibc2.12-{{ mysql_arch }}"
+mysql_tarball: "{{ mysql_package_folder }}.tar.xz"
+
+# 动态拼接下载地址
+mysql_download_url: "https://cdn.mysql.com/archives/mysql-{{ mysql_major_version }}/{{ mysql_tarball }}"
+# 本地包路径。留空则自动从 CDN 下载
+local_package_path: ""
+
+# ================= 路径配置 =================
+# 基础安装目录 (解压到哪里)
+install_base_dir: "/usr/local"
+mysql_install_dir: "{{ install_base_dir }}/{{ mysql_package_folder }}"
+
+# 动态拼接的数据目录 (引用了 playbook 中定义的变量，YAML中如果以{{开头需要加引号)
+mysql_data_dir: "{{ mysql_install_dir }}/mysqldb"
+
+# 配置文件路径
+mysql_config_path: "/etc/my.cnf"
+
+# ================= MySQL 运行参数 =================
+mysql_port: 3306
+mysql_user: "mysql"
+mysql_group: "mysql"
+
+# Root 初始密码 (建议生产环境使用 Vault 加密)
+mysql_root_password: "YourStrongPassword123!"
+
+# 性能与连接参数
+mysql_max_connections: 10000
+mysql_max_connect_errors: 10
+mysql_char_set: "utf8mb4"
+mysql_storage_engine: "INNODB"
+mysql_auth_plugin: "mysql_native_password"
+

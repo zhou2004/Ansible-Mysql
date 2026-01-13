@@ -1,0 +1,22 @@
+# templates/my.cnf.j2
+[mysqld]
+port={{ mysql_port }}
+basedir={{ mysql_install_dir }}
+datadir={{ mysql_data_dir }}
+pid-file={{ mysql_data_dir }}/mysqld.pid
+log-error={{ mysql_data_dir }}/mysqld.err
+max_connections={{ mysql_max_connections }}
+max_connect_errors={{ mysql_max_connect_errors }}
+character-set-server={{ mysql_char_set }}
+default-storage-engine={{ mysql_storage_engine }}
+default_authentication_plugin={{ mysql_auth_plugin }}
+
+# 绑定地址，允许远程需设为 0.0.0.0
+bind-address = 0.0.0.0
+
+[mysql]
+default-character-set={{ mysql_char_set }}
+
+[client]
+port={{ mysql_port }}
+default-character-set={{ mysql_char_set }}

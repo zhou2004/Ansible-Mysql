@@ -1,0 +1,35 @@
+---
+# ============================================================
+# PLAY 1: 仅为中控机 (localhost) 安装 rsync
+# ============================================================
+- name: 初始化中控机特有工具 (rsync工具)
+  hosts: localhost      # <--- sshpass 只需要本机有
+  connection: local     # 本地执行，不走 SSH
+  become: yes
+  gather_facts: yes
+
+  tasks:
+    # - name: 安装 SSH_PASS 驱动 (Debian/Ubuntu)
+    #   apt:
+    #     name: sshpass
+    #     state: present
+    #   when: ansible_os_family == "Debian"
+
+    # - name: 安装 SSH_PASS 驱动 (CentOS/RedHat)
+    #   yum:
+    #     name: sshpass
+    #     state: present
+    #   when: ansible_os_family == "RedHat"
+  
+    - name: 安装 rsync (Debian/Ubuntu)
+      apt:
+        name: rsync
+        state: present
+        update_cache: yes
+      when: ansible_os_family == "Debian"
+
+    - name: 安装 rsync (CentOS/RedHat)
+      yum:
+        name: rsync
+        state: present
+      when: ansible_os_family == "RedHat"

@@ -1,0 +1,16 @@
+---
+# ============================================================
+# PLAY 1: 为所有mysql_nodes节点 (含中控机和远程库) 安装 PyMySQL 和 Rsync
+# ============================================================
+- name: 安装 Python3 MySQL 驱动 (Debian/Ubuntu)
+  apt:
+    name: python3-pymysql
+    state: present
+    update_cache: yes
+  when: ansible_os_family == "Debian"
+
+- name: 安装 Python3 MySQL 驱动 (CentOS/RedHat)
+  yum:
+    name: python3-PyMySQL
+    state: present
+  when: ansible_os_family == "RedHat"

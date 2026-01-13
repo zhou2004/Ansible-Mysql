@@ -1,0 +1,40 @@
+---
+# 阶段 1: 部署 MySQL 集群
+- name: MySQL 节点部署
+  hosts: mysql_nodes
+  become: yes
+  gather_facts: yes
+  roles:
+    # 给 MySQL Role 打上 'db' 和 'mysql' 标签
+    - { role: mysql_install, tags: ['mysql_install', 'mysql'] }
+
+# 阶段 2: 部署 MySQL 集群主从同步
+- name: MySQL 节点初始化与复制配置
+  hosts: mysql_nodes
+  become: yes
+  gather_facts: yes
+  roles:
+    # 给 MySQL Role 打上 'db' 和 'mysql' 标签
+    - { role: mysql_replication, tags: ['mysql_replication', 'mysql'] }
+
+# ==========================================================
+# 阶段 3.1: Orchestrator - 准备被监控节点 (Agent 模式)
+# ==========================================================
+- name: Orchestrator Agent 配置 (MySQL节点)
+  hosts: mysql_nodes   # <--- 这里是 mysql_nodes
+  become: yes
+  vars:
+    orc_mode: 'agent'  # <--- 告诉 Role：我是 Agent，只跑配置任务
+  roles:
+    - { role: orchestrator, tags: ['orc_agent', 'orchestrator'] }
+
+# ==========================================================
+# 阶段 3.2: Orchestrator - 部署管理服务端 (Server 模式)
+# ==========================================================
+- name: Orchestrator Server 部署 (管理机)
+  hosts: orc_manager   # <--- 这里是 orc_manager
+  become: yes
+  vars:
+    orc_mode: 'server' # <--- 告诉 Role：我是 Server，跑全套安装
+  roles:
+    - { role: orchestrator, tags: ['orc_server', 'orchestrator'] }

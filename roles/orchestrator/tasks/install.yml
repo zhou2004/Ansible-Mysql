@@ -1,0 +1,48 @@
+---
+# --- 3. 安装 Orchestrator (修复了这里的 block 语法错误) ---
+- name: 创建安装目录
+  file:
+    path: "{{ orc_install_dir }}"
+    state: directory
+    mode: '0755'
+
+# [修复点] 使用 Block 包裹下载、解压、复制的步骤
+- name: 下载并安装二进制文件
+  block:
+    - name: 下载安装包
+      get_url:
+        url: "{{ orc_pkg_url }}"
+        dest: "/tmp/orchestrator.tar.gz"
+        timeout: 60
+    
+    - name: 创建临时解压目录
+      file: { path: "/tmp/orc_extract", state: directory }
+    
+    - name: 解压源码包
+      unarchive:
+        src: "/tmp/orchestrator.tar.gz"
+        dest: "/tmp/orc_extract"
+        remote_src: yes
+    
+    # 自动查找并归位，不论解压后的文件夹叫什么名字
+    - name: 部署二进制文件和资源
+      shell: |
+        # 复制二进制文件
+        find /tmp/orc_extract -type f -name "orchestrator" -exec cp {} {{ orc_install_dir }}/ \;
+        # 复制资源文件夹 (resources) 如果存在
+        find /tmp/orc_extract -type d -name "resources" -exec cp -r {} {{ orc_install_dir }}/ \;
+        # 赋予权限
+        chmod +x {{ orc_install_dir }}/orchestrator
+
+# --- 4. 配置环境变量 ---
+- name: 添加 Orchestrator 到系统 PATH
+  lineinfile:
+    path: /etc/profile
+    line: 'export PATH=$PATH:{{ orc_install_dir }}'
+    state: present
+
+- name: 创建软链接到 /usr/bin
+  file:
+    src: "{{ orc_install_dir }}/orchestrator"
+    dest: /usr/bin/orchestrator
+    state: link

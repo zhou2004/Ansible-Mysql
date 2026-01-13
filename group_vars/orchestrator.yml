@@ -1,0 +1,30 @@
+# --- 1. 认证信息 ---
+#ansible_ssh_pass: "{{ os_root_password | default('YourLinuxPassword123!') }}"
+#ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
+
+# --- 2. 数据库配置 ---
+mysql_config_file: "/etc/my.cnf"
+biz_mysql_root_password: "YourStrongPassword123!"
+
+# 监控账号
+orc_topology_user: "orc_topology"
+orc_topology_pass: "TopoSecret123!"
+
+# --- 3. Orchestrator 后端 ---
+backend_mysql_host: "192.168.1.225"
+backend_mysql_port: 3306
+backend_mysql_root_pass: "123456" 
+backend_mysql_user: "orc_backend"
+backend_mysql_pass: "BackendSecret123!"
+
+# --- 4. VIP 高可用配置 ---
+vip_address: "192.168.1.209"
+vip_mask: "24"
+vip_interface: "ens192" 
+initial_master_ip: "192.168.1.224"
+
+# --- 5. 软件版本 (切换为 tar.gz) ---
+orc_version: "3.2.6"
+orc_pkg_url: "https://github.com/openark/orchestrator/releases/download/v{{ orc_version }}/orchestrator-{{ orc_version }}-linux-amd64.tar.gz"
+orc_install_dir: "/usr/local/orchestrator"
+

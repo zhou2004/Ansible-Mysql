@@ -1,0 +1,20 @@
+# ---------------- 1. 架构配置 ----------------
+initial_master_ip: "192.168.1.224"  # 指定谁是主库
+server_id_prefix: "5"               # ServerID 前缀 (生成 51, 52...)
+
+# ---------------- 2. 认证信息 ----------------
+# Linux Root 密码 (用于 SSH 首次连接)
+#ansible_ssh_pass: "{{ os_root_password | default('YourLinuxPassword123!') }}"
+#ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
+
+# MySQL Root 密码 (用于执行 SQL)
+mysql_root_password: "YourStrongPassword123!"
+
+# 复制专用账号
+repl_user: "repl"
+repl_password: "ReplPassword123!"
+
+# ---------------- 3. 配置文件路径 ----------------
+# 默认路径 (会根据 OS 自动调整)
+mysql_config_file: "/etc/my.cnf"
+mysql_log_bin: "mysql-bin"

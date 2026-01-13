@@ -1,0 +1,29 @@
+---
+- name: 等待 SSH 连接
+  wait_for_connection: { timeout: 10 }
+
+- name: 配置 MySQL report_host 和 skip-name-resolve
+  block:
+    - lineinfile:
+        path: "{{ mysql_config_file }}"
+        regexp: "^report_host"
+        line: "report_host = {{ ansible_host }}"
+        insertafter: "^[\\[]mysqld[\\]]"
+    - lineinfile:
+        path: "{{ mysql_config_file }}"
+        regexp: "^skip-name-resolve"
+        line: "skip-name-resolve"
+        insertafter: "^[\\[]mysqld[\\]]"
+  notify: Restart MySQL Service
+
+- name: 创建 Orchestrator 监控用户
+  shell: |
+    mysql -u root -p'{{ biz_mysql_root_password }}' -e "
+    SET SQL_LOG_BIN=0;
+    CREATE USER IF NOT EXISTS '{{ orc_topology_user }}'@'%' IDENTIFIED BY '{{ orc_topology_pass }}';
+    GRANT SUPER, PROCESS, REPLICATION SLAVE, RELOAD, SELECT ON *.* TO '{{ orc_topology_user }}'@'%';
+    GRANT SELECT ON performance_schema.* TO '{{ orc_topology_user }}'@'%';
+    GRANT SYSTEM_VARIABLES_ADMIN, REPLICATION_SLAVE_ADMIN ON *.* TO '{{ orc_topology_user }}'@'%';
+    FLUSH PRIVILEGES;
+    SET SQL_LOG_BIN=1;"
+  ignore_errors: yes 

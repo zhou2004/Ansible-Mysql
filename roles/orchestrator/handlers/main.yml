@@ -1,0 +1,11 @@
+---
+- name: Restart MySQL Service
+  systemd:
+    name: mysqld
+    state: restarted
+
+- name: Restart Orchestrator
+  systemd: 
+    name: orchestrator
+    state: restarted
+    daemon_reload: yes

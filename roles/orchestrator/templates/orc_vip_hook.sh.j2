@@ -1,0 +1,90 @@
+#!/bin/bash
+# ----------------------------------------------------
+# 强力调试：无论脚本是否成功，先写个文件证明被调用了
+echo "$(date) [DEBUG] TRIGGERED: $@" >> /tmp/orc_debug_trigger.log
+# ----------------------------------------------------
+
+# 变量由 Ansible 渲染注入
+VIP="{{ vip_address }}"
+NETMASK="{{ vip_mask }}"
+INTERFACE="{{ vip_interface }}"
+LOG_FILE="/var/log/orc_failover.log"
+
+# SSH 设置：极速超时，跳过 HostKey 检查，静默模式
+SSH_OPTS="-o ConnectTimeout=3 -o StrictHostKeyChecking=no -o BatchMode=yes"
+
+# --- 核心函数 ---
+log() {
+    echo "$(date '+%F %T') [$1] $2" >> $LOG_FILE
+}
+
+ssh_exec() {
+    local host=$1
+    local cmd=$2
+    log "EXEC" "SSH -> $host: $cmd"
+    OUT=$(ssh $SSH_OPTS root@$host "$cmd" 2>&1)
+    RET=$?
+    if [ $RET -ne 0 ]; then
+        log "ERROR" "SSH Failed (Code $RET): $OUT"
+    fi
+    return $RET
+}
+
+add_vip() {
+    local host=$1
+    log "INFO" "正在尝试将 VIP 挂载到: $host"
+    
+    # 1. 检查网卡是否存在
+    ssh_exec "$host" "ip link show $INTERFACE" || { log "FATAL" "网卡 $INTERFACE 不存在"; return 1; }
+    
+    # 2. 挂载 VIP (label 方便查看)
+    # 如果 VIP 已存在，ip addr add 返回 2，我们视为成功
+    ssh_exec "$host" "ip addr add $VIP/$NETMASK dev $INTERFACE label $INTERFACE:0"
+    RET=$?
+    
+    if [ $RET -eq 0 ] || [ $RET -eq 2 ]; then
+        # 3. 发送 ARP 广播
+        ssh_exec "$host" "arping -c 4 -A -I $INTERFACE $VIP"
+        log "SUCCESS" "VIP 挂载成功并已广播 ARP"
+        return 0
+    else
+        log "FATAL" "VIP 挂载命令失败 (Code $RET)"
+        return 1
+    fi
+}
+
+remove_vip() {
+    local host=$1
+    log "INFO" "正在尝试从旧节点移除 VIP: $host"
+    # 尽力而为，移除失败不中断流程
+    ssh_exec "$host" "ip addr del $VIP/$NETMASK dev $INTERFACE" || true
+}
+
+# --- 主流程 ---
+TYPE=$1
+OLD_RAW=$2
+NEW_RAW=$3
+
+# 剥离端口号 (1.1.1.1:3306 -> 1.1.1.1)
+OLD_IP=$(echo $OLD_RAW | cut -d: -f1)
+NEW_IP=$(echo $NEW_RAW | cut -d: -f1)
+
+log "START" "Event=$TYPE | Old=$OLD_IP | New=$NEW_IP"
+
+# 安全检查
+if [ -z "$NEW_IP" ]; then
+    log "FATAL" "新主库 IP 为空，无法执行漂移！"
+    exit 1
+fi
+
+# 1. 卸载旧 VIP
+if [ ! -z "$OLD_IP" ] && [ "$OLD_IP" != "$NEW_IP" ]; then
+    remove_vip "$OLD_IP"
+fi
+
+# 2. 挂载新 VIP
+add_vip "$NEW_IP"
+EXIT_CODE=$?
+
+log "END" "任务结束 (Code $EXIT_CODE)"
+exit $EXIT_CODE

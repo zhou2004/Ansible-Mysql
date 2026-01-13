@@ -1,0 +1,83 @@
+---
+# --- 1. 环境初始化 ---
+# 1. 安装依赖
+- include_tasks: dependencies.yml
+
+- name: 等待 SSH 连接
+  wait_for_connection: { timeout: 10 }
+
+# --- 2. 修改 MySQL 配置 (GTID 核心) ---
+- name: 配置 my.cnf (GTID/Binlog)
+  blockinfile:
+    path: "{{ mysql_config_file }}"
+    marker: "# {mark} ANSIBLE REPLICATION CONFIG"
+    insertafter: "^[\\[]mysqld[\\]]"
+    block: |
+      # 动态生成唯一 ServerID
+      server_id={{ server_id_prefix }}{{ play_hosts.index(inventory_hostname) + 1 }}
+      
+      # 基础复制配置
+      log_bin={{ mysql_log_bin }}
+      binlog_format=ROW
+      skip_name_resolve=1
+      bind-address=0.0.0.0
+      
+      # GTID 强一致性配置
+      gtid_mode=ON
+      enforce_gtid_consistency=ON
+      
+      # 认证插件兼容性
+      default_authentication_plugin=mysql_native_password
+  notify: Restart MySQL
+
+# 强制立即重启以应用配置 (否则后续连接会失败)
+- meta: flush_handlers
+
+# --- 3. 验证 GTID 状态 ---
+- name: 检查 GTID 是否已生效
+  shell: "mysql -u root -p'{{ mysql_root_password }}' -NBe 'SELECT @@GLOBAL.GTID_MODE'"
+  register: gtid_status
+  changed_when: false
+  failed_when: gtid_status.stdout != 'ON'
+
+# --- 4. 创建复制账号 (只在 Master 执行) ---
+- name: 创建复制用户 (Repl User)
+  shell: |
+    mysql -u root -p'{{ mysql_root_password }}' -e "
+    CREATE USER IF NOT EXISTS '{{ repl_user }}'@'%' IDENTIFIED WITH mysql_native_password BY '{{ repl_password }}';
+    GRANT REPLICATION SLAVE ON *.* TO '{{ repl_user }}'@'%';
+    FLUSH PRIVILEGES;"
+    
+# --- 5. 构建主从关系 ---
+- name: 配置从库指向主库
+  block:
+    # 1. 获取当前从库状态
+    - name: 检查 Slave 状态
+      mysql_replication:
+        login_user: root
+        login_password: "{{ mysql_root_password }}"
+        mode: getreplica
+      register: slave_stat
+      ignore_errors: yes
+    
+    # 2. 如果未配置复制，则执行 CHANGE MASTER
+    - name: 建立 GTID 复制链接
+      mysql_replication:
+        login_user: root
+        login_password: "{{ mysql_root_password }}"
+        mode: changeprimary
+        primary_host: "{{ initial_master_ip }}"
+        primary_user: "{{ repl_user }}"
+        primary_password: "{{ repl_password }}"
+        primary_auto_position: yes
+      when: (slave_stat.Is_Replica is not defined) or (not slave_stat.Is_Replica)
+    
+    # 3. 启动复制线程
+    - name: 启动 Slave
+      mysql_replication:
+        login_user: root
+        login_password: "{{ mysql_root_password }}"
+        mode: startreplica
+
+  # 仅在非 Master 节点执行
+  when: inventory_hostname != initial_master_ip
