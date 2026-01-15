@@ -1,0 +1,24 @@
+# 导入工具选择: mylaoder 或 pv
+restore_tool: "myloader"
+
+# 导入范围: all (全库), single (单库), multi (多库)
+restore_scope: "single"
+
+# 如果是 single 或 multi，指定库名
+restore_databases: "prometheusalert"
+# 如果是 multi: restore_databases: ["db1", "db2"]
+
+restore_user: "root"
+restore_password: "YourStrongPassword123!"
+restore_directory: "/data/backup"
+restore_sql_file: "/data/backup/backup_192.168.1.230_2024-06-15_12-00-00.sql.gz"
+log_file_directory: "/data/backup/logs"
+# myloader选项
+myloader_options:
+  myloader_threads: 4
+  myloader_overwrite: true
+
+# pv选项
+pv_options:
+  buffer_size: "1M"
+  rate_limit: "10M"

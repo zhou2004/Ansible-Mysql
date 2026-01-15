@@ -1,0 +1,37 @@
+# 备份工具选择: mysqldump 或 mydumper
+backup_tool: "mydumper"
+
+# 备份范围: all (全库), single (单库), multi (多库)
+backup_scope: "single"
+
+# 如果是 single 或 multi，指定库名
+backup_databases: "prometheusalert"
+# 如果是 multi: backup_databases: ["db1", "db2"]
+
+backup_user: "root"
+backup_password: "123456"
+backup_directory: "/data/backup"
+
+# mysqldump选项
+mysqldump_options:
+  single-transaction: true  # 开启事务
+  master-data: 2
+  quick: true
+  routines: true
+  triggers: true
+  events: true
+  hex-blob: true            # 注意这里改成了 hex-blob
+  flush-logs: true
+  flush-privileges: true
+  default-character-set: "utf8"
+  # 新增一个参数示例
+  # max_allowed_packet: "64M"
+
+# mydumper选项
+mydumper_options:
+  threads: 4        
+  rows: 500000
+  compress: true
+  # 新增示例
+  # long-query-guard: 1# filepath: roles/mysql_dumper/defaults/main.yml
+# ... existing code ...

@@ -1,0 +1,58 @@
+#!/bin/bash
+
+# 由 Ansible 计算并传入的最具体备份目录路径
+RESTORE_DIR="{{ specific_backup_path }}"
+TIMESTAMP="{{ current_time }}"
+# 确保使用绝对路径的日志目录
+LOG_FILE="{{ log_file_directory }}/mysql_loader_{{ target_mysql_host }}_${TIMESTAMP}.log"
+
+echo "------------------------------------------------" > ${LOG_FILE}
+echo "Restore job started at $(date)" >> ${LOG_FILE}
+echo "Source Backup Directory: $RESTORE_DIR" >> ${LOG_FILE}
+
+# ---------------------------------------------------------
+# 动态构建参数
+# ---------------------------------------------------------
+MYLOADER_ARGS=""
+
+# 1. Scope 处理
+{% if restore_scope == 'single' or restore_scope == 'multi' %}
+# 如果指定了库名，MyLoader 的 --database (-B) 参数用于指定 SOURCE 数据库。
+# 如果你想把 source_db 恢复到 target_db，还需要配合 --source-db 选项（这里暂不处理复杂改名场景）
+MYLOADER_ARGS="$MYLOADER_ARGS --database {{ restore_databases | join(',') if restore_scope == 'multi' else restore_databases }}"
+{% endif %}
+
+# 2. Options 处理
+{% for key, value in myloader_options.items() %}
+  {% if value == true %}
+MYLOADER_ARGS="$MYLOADER_ARGS --{{ key | replace('myloader_', '') | replace('_', '-') }}"
+  {% elif value != false %}
+MYLOADER_ARGS="$MYLOADER_ARGS --{{ key | replace('myloader_', '') | replace('_', '-') }} {{ value }}"
+  {% endif %}
+{% endfor %}
+
+
+echo "Running myloader from $RESTORE_DIR to {{ target_mysql_host }}..." >> ${LOG_FILE}
+
+# 执行 myloader
+# 注意: myloader 也需要 --directory 参数指向具体的 metadata 所在目录
+myloader \
+  --host {{ target_mysql_host }} \
+  --port {{ target_mysql_port }} \
+  --user {{ restore_user }} \
+  --password '{{ restore_password }}' \
+  --directory "$RESTORE_DIR" \
+  --verbose 3 \
+  $MYLOADER_ARGS \
+  >> ${LOG_FILE} 2>&1
+
+EXIT_CODE=$?
+
+echo "------------------------------------------------" >> ${LOG_FILE}
+if [ ${EXIT_CODE} -eq 0 ]; then
+    echo "Status: SUCCESS" >> ${LOG_FILE}
+else
+    echo "Status: FAILED (Exit Code: ${EXIT_CODE})" >> ${LOG_FILE}
+fi
+
+exit ${EXIT_CODE}

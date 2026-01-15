@@ -1,0 +1,13 @@
+---
+# 修改：移除了 hosts, become, roles 等剧本层级关键字
+- name: Install dependencies (mysql-client, mydumper, etc.)
+  include_tasks: install_deps.yml
+
+- name: Set Backup Timestamp
+  set_fact:
+    current_time: "{{ ansible_date_time.date }}_{{ ansible_date_time.hour }}-{{ ansible_date_time.minute }}"
+
+- name: Perform MySQL backup
+  # 修改：根据 backup_tool 变量动态调用对应的 task 文件
+  # backup_tool 默认为 'mysqldump'
+  include_tasks: "dump_{{ backup_tool | default('mysqldump') }}.yml"

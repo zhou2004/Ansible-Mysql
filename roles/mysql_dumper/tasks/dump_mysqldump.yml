@@ -1,0 +1,69 @@
+---
+- name: Determine Database Arguments for mysqldump
+  set_fact:
+    db_args: >-
+      {% if backup_scope == 'all' %}
+      --all-databases
+      {% elif backup_scope == 'multi' %}
+      --databases {{ backup_databases | join(' ') }}
+      {% else %}
+      --databases {{ backup_databases }}
+      {% endif %}
+
+- name: Build Dynamic Mysqldump Options
+  set_fact:
+    mysqldump_args_string: >-
+      {% for key, value in mysqldump_options.items() %}
+      {% if value == true %}
+      --{{ key | replace('_', '-') }}
+      {% elif value != false %}
+      --{{ key | replace('_', '-') }}={{ value }}
+      {% endif %}
+      {% endfor %}
+
+- name: Ensure backup directory exists
+  file:
+    path: "{{ backup_directory }}"
+    state: directory
+    mode: '0755'
+
+- name: Define Log File Path
+  set_fact:
+    backup_log_file: "{{ backup_directory }}/backup_{{ target_mysql_host }}_{{ current_time }}.log"
+
+- name: Backup MySQL databases using mysqldump (Dynamic)
+  shell: >
+    set -o pipefail;
+    echo "Backup started at $(date)" > {{ backup_log_file }};
+    mysqldump 
+    -v 
+    -h {{ target_mysql_host }} 
+    -P {{ target_mysql_port }} 
+    -u {{ backup_user }} 
+    -p'{{ backup_password }}' 
+    {{ mysqldump_args_string }} 
+    {{ db_args }} 
+    2>> {{ backup_log_file }} 
+    | gzip > {{ backup_directory }}/backup_{{ target_mysql_host }}_{{ current_time }}.sql.gz;
+    EXIT_CODE=$?;
+    echo "Backup finished at $(date) with exit code $EXIT_CODE" >> {{ backup_log_file }};
+    exit $EXIT_CODE
+  args:
+    executable: /bin/bash
+  register: dump_result
+  ignore_errors: yes # 暂时忽略错误，以便在下一步打印日志
+
+- name: Display Mysqldump Error Log if Failed
+  command: "cat {{ backup_log_file }}"
+  register: log_content
+  when: dump_result.rc != 0
+
+- name: Fail task if mysqldump failed
+  fail:
+    msg: "Mysqldump failed! Error log content: {{ log_content.stdout }}"
+  when: dump_result.rc != 0
+
+- name: Log backup success
+  debug:
+    msg: "Mysqldump completed successfully. File: {{ backup_directory }}/backup_{{ target_mysql_host }}_{{ current_time }}.sql.gz"
+  when: dump_result.rc == 0

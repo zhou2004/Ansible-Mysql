@@ -1,0 +1,11 @@
+---
+- name: Install dependencies (mysql-client, mydumper, pv)
+  include_tasks: install_deps.yml
+
+- name: Set Restore Timestamp
+  set_fact:
+    current_time: "{{ ansible_date_time.date }}_{{ ansible_date_time.hour }}-{{ ansible_date_time.minute }}"
+
+- name: Perform MySQL Restore
+  # 根据 restore_tool 变量动态调用: load_mysqldump.yml (pv) 或 load_myloader.yml
+  include_tasks: "load_{{ restore_tool | default('mysqldump') }}.yml"

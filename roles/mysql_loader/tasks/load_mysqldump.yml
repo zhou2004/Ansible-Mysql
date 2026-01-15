@@ -1,0 +1,87 @@
+---
+- name: Identify Backup File
+  shell: "ls -t {{ restore_directory }}/*.sql.gz | head -n 1"
+  register: found_backup_file
+  changed_when: false
+
+- name: Fail if no backup file found
+  fail:
+    msg: "No .sql.gz file found in {{ restore_directory }}"
+  when: found_backup_file.stdout == ""
+
+- name: Define Log File
+  set_fact:
+    restore_log_file: "{{ restore_directory }}/restore_{{ target_mysql_host }}_{{ current_time }}.log"
+
+# ==========================================================
+# 新增：构建动态参数字符串
+# ==========================================================
+- name: Build Dynamic MySQL Restore Options
+  set_fact:
+    mysql_restore_args: >-
+      {% for key, value in mysqldump_options.items() %}
+      {% if value == true %}
+      --{{ key | replace('_', '-') }}
+      {% elif value != false %}
+      --{{ key | replace('_', '-') }}={{ value }}
+      {% endif %}
+      {% endfor %}
+
+- name: Restore with Native Gzip (Dynamic Args)
+  shell: |
+    set -o pipefail
+    
+    LOG_FILE="{{ restore_log_file }}"
+    echo "Restore started at $(date)" > "$LOG_FILE"
+
+    # 1. 动态确定目标库名
+    TARGET_DB=""
+    {% if restore_scope == 'single' %}
+    TARGET_DB="{{ restore_databases }}"
+    {% endif %}
+
+    echo "Debug: Restoring file: {{ found_backup_file.stdout }}" >> "$LOG_FILE"
+    echo "Debug: Target DB: $TARGET_DB" >> "$LOG_FILE"
+    echo "Debug: Extra Args: {{ mysql_restore_args }}" >> "$LOG_FILE"
+    
+    # 2. 执行恢复 (注入 mysql_restore_args)
+    gzip -dc "{{ found_backup_file.stdout }}" \
+    | mysql \
+      -v \
+      -h {{ target_mysql_host }} \
+      -P {{ target_mysql_port }} \
+      -u {{ restore_user }} \
+      -p'{{ restore_password }}' \
+      {{ mysql_restore_args }} \
+      $TARGET_DB \
+      >> "$LOG_FILE" 2>&1
+      
+    EXIT_CODE=$?
+    echo "Restore finished at $(date) with exit code $EXIT_CODE" >> "$LOG_FILE"
+    exit $EXIT_CODE
+  args:
+    executable: /bin/bash
+  register: restore_result
+  ignore_errors: yes
+
+- name: Display Restore Log if Failed
+  command: "cat {{ restore_log_file }}"
+  when: restore_result.rc != 0
+
+- name: Fail task if restore failed
+  fail:
+    msg: "Restore failed! See log: {{ restore_log_file }}"
+  when: restore_result.rc != 0
+
+- name: Verify Restore Content
+  shell: "tail -n 20 {{ restore_log_file }}"
+  register: verify_log
+  changed_when: false
+
+- name: Show Restore Details
+  debug:
+    msg: 
+      - "Restore Success!"
+      - "Log: {{ restore_log_file }}"
+      - "Last logs: {{ verify_log.stdout_lines }}"
+  when: restore_result.rc == 0

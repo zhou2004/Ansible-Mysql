@@ -1,0 +1,72 @@
+#!/bin/bash
+
+# 统一使用 backup_directory 变量
+BACKUP_ROOT="{{ backup_directory }}"
+TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+
+# 注意：这里需要区分 host，因为是在备份机上运行，不同目标的备份需要分开存放
+BACKUP_DIR="${BACKUP_ROOT}/mydumper_{{ target_mysql_host }}_${TIMESTAMP}"
+LOG_FILE="${BACKUP_DIR}/backup.log"
+
+mkdir -p ${BACKUP_DIR}
+mkdir -p ${BACKUP_ROOT}/logs
+
+echo "------------------------------------------------" >> ${LOG_FILE}
+echo "Job started at $(date)" >> ${LOG_FILE}
+
+# ---------------------------------------------------------
+# 动态构建参数 (由 Ansible Jinja2 渲染时生成)
+# ---------------------------------------------------------
+MYDUMPER_ARGS=""
+
+# 1. 处理数据库范围 (Scope)
+# 使用块级 if 语法，避免 "Expected an expression" 错误，且不再添加额外的单引号
+{% if backup_scope == 'multi' %}
+MYDUMPER_ARGS="$MYDUMPER_ARGS --database {{ backup_databases | join(' ') }}"
+{% elif backup_scope == 'single' %}
+MYDUMPER_ARGS="$MYDUMPER_ARGS --database {{ backup_databases }}"
+{% endif %}
+
+# 2. 处理通用选项 (Options)
+# 遍历 mydumper_options 字典
+{% for key, value in mydumper_options.items() %}
+  {% if value == true %}
+  # 布尔值为真
+MYDUMPER_ARGS="$MYDUMPER_ARGS --{{ key | replace('mydumper_', '') | replace('_', '-') }}"
+  {% elif value != false %}
+  # 非布尔值
+MYDUMPER_ARGS="$MYDUMPER_ARGS --{{ key | replace('mydumper_', '') | replace('_', '-') }} {{ value }}"
+  {% endif %}
+{% endfor %}
+
+# ---------------------------------------------------------
+# 执行备份
+# ---------------------------------------------------------
+echo "Running mydumper with args: $MYDUMPER_ARGS" >> ${LOG_FILE}
+
+# 注意：这里引用 $MYDUMPER_ARGS 时不要加双引号，
+# 这样 Shell 才能正确按空格拆分参数，但不会把之前字符串里的引号当成字符
+mydumper \
+  --host {{ target_mysql_host }} \
+  --port {{ target_mysql_port }} \
+  --user {{ backup_user }} \
+  --password '{{ backup_password }}' \
+  --outputdir ${BACKUP_DIR} \
+  --logfile ${LOG_FILE} \
+  --verbose 3 \
+  $MYDUMPER_ARGS
+
+EXIT_CODE=$?
+
+echo "------------------------------------------------" >> ${LOG_FILE}
+
+# ---------------------------------------------------------
+# 简单结果检查
+# ---------------------------------------------------------
+if [ ${EXIT_CODE} -eq 0 ]; then
+    echo "Status: SUCCESS" >> ${LOG_FILE}
+else
+    echo "Status: FAILED (Exit Code: ${EXIT_CODE})" >> ${LOG_FILE}
+fi
+
+exit ${EXIT_CODE}

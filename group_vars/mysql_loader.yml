@@ -1,0 +1,24 @@
+# 导入工具选择: mylaoder 或 mysqldump
+restore_tool: "myloader"
+
+# 导入范围: all (全库), single (单库), multi (多库)
+restore_scope: "single"
+
+# 如果是 single 或 multi，指定库名
+restore_databases: "prometheusalert"
+# 如果是 multi: restore_databases: ["db1", "db2"]
+
+restore_user: "root"
+restore_password: "YourStrongPassword123!"
+restore_directory: "/data/backup"
+# mysqldump使用的参数
+log_file_directory: "/data/backup/logs"
+# myloader选项
+myloader_options:
+  threads: 4
+
+# mysqldump选项
+mysqldump_options:
+  default-character-set: utf8mb4
+  # 新增一个参数示例
+  # max_allowed_packet: "64M"

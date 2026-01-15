@@ -1,0 +1,11 @@
+[load_nodes]
+; 导入节点1，负责导入 192.168.1.202
+restore_server_01 ansible_host=192.168.1.230 target_mysql_host=192.168.1.230 target_mysql_port=3306
+
+; 导入节点2，负责导入 192.168.1.203
+; restore_server_02 ansible_host=192.168.1.101 target_mysql_host=192.168.1.203 target_mysql_port=3306
+
+[mysql_nodes]
+; 这里列出数据库节点主要是为了可能的其他管理操作，或者在恢复时作为目标引用
+;db_server_01 ansible_host=192.168.1.202 mysql_port=3307
+db_server_02 ansible_host=192.168.1.225 mysql_port=3306

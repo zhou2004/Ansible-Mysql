@@ -1,0 +1,50 @@
+---
+- name: Find Latest MyDumper Backup Directory
+  # 假设 mydumper 备份目录前缀为 'mydumper_'，这里按修改时间排序取最新的一个目录
+  shell: "ls -td {{ restore_directory }}/mydumper_* | head -n 1"
+  register: latest_backup_dir
+  changed_when: false
+
+- name: Fail if no backup directory found
+  fail:
+    msg: "No mydumper backup directory found in {{ restore_directory }}"
+  when: latest_backup_dir.stdout == ""
+
+- name: Set Specific Backup Path variable
+  set_fact:
+    specific_backup_path: "{{ latest_backup_dir.stdout }}"
+
+- name: Debug backup path
+  debug:
+    msg: "Found latest backup at: {{ specific_backup_path }}"
+
+- name: Ensure log directory exists
+  file:
+    path: "{{ log_file_directory }}"
+    state: directory
+    mode: '0755'
+
+- name: Create myloader restore script from template
+  template:
+    src: run_myloader.sh.j2
+    dest: "{{ restore_directory }}/run_restore_{{ target_mysql_host }}.sh"
+    mode: '0755'
+
+- name: Execute myloader restore script
+  shell: "{{ restore_directory }}/run_restore_{{ target_mysql_host }}.sh"
+  args:
+    executable: /bin/bash
+  register: script_result
+
+- name: Show restore script output
+  debug:
+    msg: "{{ script_result.stdout_lines }}"
+
+- name: Show Restore Log Content (Tail)
+  shell: "tail -n 20 {{ log_file_directory }}/mysql_loader_{{ target_mysql_host }}_{{ current_time }}.log"
+  register: log_tail
+  changed_when: false
+
+- name: Display Log Tail
+  debug:
+    msg: "{{ log_tail.stdout_lines }}"

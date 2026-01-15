@@ -1,0 +1,6 @@
+- name: Install dependencies for mysql_loader
+  package:
+    name:
+      - pv
+      - mydumper
+    state: present

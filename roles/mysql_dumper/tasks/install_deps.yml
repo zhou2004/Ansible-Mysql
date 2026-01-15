@@ -1,0 +1,15 @@
+- name: Install necessary dependencies for mysql_dumper
+  package:
+    name:
+      - mydumper
+      - pv
+    state: present
+  when: ansible_os_family == "Debian"
+
+- name: Install necessary dependencies for mysql_dumper
+  yum:
+    name:
+      - mydumper
+      - pv
+    state: present
+  when: ansible_os_family == "RedHat"

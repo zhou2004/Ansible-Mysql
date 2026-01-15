@@ -1,0 +1,41 @@
+---
+- name: Determine Database Arguments for mydumper
+  set_fact:
+    mydumper_db_args: >-
+      {% if backup_scope == 'multi' or backup_scope == 'single' %}
+      --database "{{ backup_databases | join(' ') if backup_scope == 'multi' else backup_databases }}"
+      {% endif %}
+
+- name: Build Dynamic MyDumper Options
+  set_fact:
+    mydumper_args_string: >-
+      {% for key, value in mydumper_options.items() %}
+      {% if value == true %}
+      --{{ key | replace('mydumper_', '') | replace('_', '-') }}
+      {% elif value != false %}
+      --{{ key | replace('mydumper_', '') | replace('_', '-') }} {{ value }}
+      {% endif %}
+      {% endfor %}
+  # 说明：这里做了简单处理，去掉 'mydumper_' 前缀，并将下划线转为横杠。
+  # 例如 mydumper_long_query_guard: 60 -> --long-query-guard 60
+
+- name: Ensure backup directory exists
+  file:
+    path: "{{ backup_directory }}"
+    state: directory
+    mode: '0755'
+
+- name: Create mydumper backup script from template
+  template:
+    src: run_mydumper.sh.j2
+    dest: "{{ backup_directory }}/run_backup_{{ target_mysql_host }}.sh"
+    mode: '0755'
+
+- name: Execute mydumper backup script
+  shell: "{{ backup_directory }}/run_backup_{{ target_mysql_host }}.sh"
+  args:
+    executable: /bin/bash
+  register: script_result
+- name: Show backup logs
+  debug:
+    msg: "Mydumper backup output: {{ script_result.stdout }}"

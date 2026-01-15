@@ -38,3 +38,20 @@
     orc_mode: 'server' # <--- 告诉 Role：我是 Server，跑全套安装
   roles:
     - { role: orchestrator, tags: ['orc_server', 'orchestrator'] }
+
+
+# 阶段 4: MySQL 数据备份
+- name: MySQL 数据备份任务
+  hosts: dump_nodes
+  become: yes
+  gather_facts: yes
+  roles:
+  - { role: mysql_dumper, tags: ['mysql_dumper'] }
+
+# 阶段 5: MySQL 数据恢复
+- name: MySQL 数据恢复任务
+  hosts: load_nodes
+  become: yes
+  gather_facts: yes
+  roles:
+  - { role: mysql_loader, tags: ['mysql_loader'] }
