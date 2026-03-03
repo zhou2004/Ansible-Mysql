@@ -151,7 +151,7 @@
       notify: Restart MySQL
 
     - name: 启动服务
-      systemd: { name: mysql, state: started, enabled: yes, daemon_reload: yes }
+      systemd: { name: mysqld, state: started, enabled: yes, daemon_reload: yes }
 
     - name: 环境变量软链
       file: { src: "{{ mysql_install_dir }}/bin/mysql", dest: /usr/bin/mysql, state: link }
